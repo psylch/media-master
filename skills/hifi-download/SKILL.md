@@ -1,5 +1,5 @@
 ---
-name: hifi-download-skill
+name: hifi-download
 description: Discover music, get personalized recommendations, and download high-fidelity audio files. Use when user wants to find new music based on their taste, search for songs/albums/artists, get recommendations similar to artists they like, or download lossless audio (FLAC/Hi-Res) from Qobuz or TIDAL. Trigger phrases include "find music like", "recommend songs", "download album", "lossless", "Hi-Res", "FLAC", "music discovery", "similar artists", "setup music".
 ---
 
