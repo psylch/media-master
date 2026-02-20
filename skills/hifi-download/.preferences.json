@@ -1,0 +1,18 @@
+{
+  "spotify": {
+    "status": "not_configured",
+    "reason": null
+  },
+  "lastfm": {
+    "status": "not_configured",
+    "reason": null
+  },
+  "qobuz": {
+    "status": "enabled",
+    "reason": null
+  },
+  "tidal": {
+    "status": "not_configured",
+    "reason": null
+  }
+}

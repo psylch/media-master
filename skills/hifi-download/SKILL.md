@@ -119,13 +119,38 @@ bash ${SKILL_PATH}/run.sh platform_search "Album Name" -p qobuz|tidal
 
 Searches the download platform's catalog. Returns IDs for use with download command.
 
-### Download
+### Download (async — returns immediately)
 
 ```bash
 bash ${SKILL_PATH}/run.sh platform_download ID -p qobuz|tidal -t album|track
 ```
 
-Downloads audio in the configured quality. Use the ID from `platform_search` results.
+Queues the download in a background process and returns a `download_id` immediately. The agent is free to continue other work. Use `download_status` to poll progress.
+
+To block until the download completes (legacy behavior):
+
+```bash
+bash ${SKILL_PATH}/run.sh platform_download ID -p qobuz -t album --sync
+```
+
+### Check Download Status
+
+```bash
+bash ${SKILL_PATH}/run.sh download_status DOWNLOAD_ID
+bash ${SKILL_PATH}/run.sh download_status --all
+bash ${SKILL_PATH}/run.sh download_status --active
+bash ${SKILL_PATH}/run.sh download_status --json
+```
+
+Poll the status of a specific download or list all downloads. Use `--active` to show only pending/in_progress tasks. Use `--json` for structured output.
+
+### Open Download Dashboard
+
+```bash
+bash ${SKILL_PATH}/run.sh download_ui
+```
+
+Opens a web dashboard at `http://localhost:8765` showing real-time download status with progress bars. Auto-refreshes every 3 seconds.
 
 ## Service Management
 
@@ -154,8 +179,10 @@ bash ${SKILL_PATH}/run.sh enable_service spotify
 1. Run `status` to confirm download service is READY
 2. Search: `platform_search "Album Name" -p qobuz`
 3. Present results with quality info
-4. Download: `platform_download ID -p qobuz -t album`
-5. Report download path and file size to user
+4. Download: `platform_download ID -p qobuz -t album` (returns download_id immediately)
+5. Tell user download is queued, optionally open `download_ui` for visual monitoring
+6. Poll with `download_status DOWNLOAD_ID` until completed
+7. Report download path and file size to user
 
 ## Error Handling
 

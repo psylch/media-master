@@ -22,7 +22,7 @@ for skill in hifi-download quark-download zlib-download; do
     fi
 
     rm -rf "$dst"
-    cp -R "$src" "$dst"
+    rsync -a --exclude '.venv' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' "$src/" "$dst/"
     echo "  OK   $skill"
 done
 
