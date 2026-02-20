@@ -1,0 +1,38 @@
+{
+  "name": "psylch-media-master",
+  "owner": {
+    "name": "psylch"
+  },
+  "metadata": {
+    "description": "All-in-one media acquisition toolkit: music, videos, and books"
+  },
+  "plugins": [
+    {
+      "name": "hifi-download",
+      "source": "./hifi-download-skill",
+      "description": "Music discovery and Hi-Res audio downloads via Spotify, Last.fm, Qobuz, and TIDAL",
+      "version": "1.0.0",
+      "category": "productivity",
+      "tags": ["music", "hifi", "flac", "qobuz", "tidal", "lossless"],
+      "homepage": "https://github.com/psylch/hifi-download-skill"
+    },
+    {
+      "name": "quark-download",
+      "source": "./quark-download-skill",
+      "description": "Search, validate, and save cloud drive resources via PanSou and Quark desktop APP",
+      "version": "1.0.0",
+      "category": "productivity",
+      "tags": ["quark", "cloud-drive", "pansou", "download", "网盘"],
+      "homepage": "https://github.com/psylch/quark-download-skill"
+    },
+    {
+      "name": "zlib-download",
+      "source": "./zlib-download-skill",
+      "description": "Search and download books from Z-Library and Anna's Archive",
+      "version": "1.0.0",
+      "category": "productivity",
+      "tags": ["books", "zlibrary", "annas-archive", "ebooks"],
+      "homepage": "https://github.com/psylch/zlib-download-skill"
+    }
+  ]
+}

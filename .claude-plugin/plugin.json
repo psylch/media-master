@@ -1,0 +1,12 @@
+{
+  "name": "media-master",
+  "description": "All-in-one media acquisition toolkit: Hi-Res music downloads, cloud drive resource search, and book downloads",
+  "version": "1.0.0",
+  "author": {
+    "name": "psylch"
+  },
+  "homepage": "https://github.com/psylch/media-master",
+  "repository": "https://github.com/psylch/media-master",
+  "license": "MIT",
+  "keywords": ["music", "hifi", "flac", "qobuz", "tidal", "quark", "zlib", "books", "download", "media"]
+}

@@ -1,0 +1,9 @@
+[submodule "hifi-download-skill"]
+	path = hifi-download-skill
+	url = git@github.com:psylch/hifi-download-skill.git
+[submodule "quark-download-skill"]
+	path = quark-download-skill
+	url = git@github.com:psylch/quark-download-skill.git
+[submodule "zlib-download-skill"]
+	path = zlib-download-skill
+	url = git@github.com:psylch/zlib-download-skill.git
