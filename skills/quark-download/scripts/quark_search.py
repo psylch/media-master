@@ -370,6 +370,43 @@ def cmd_check(args):
         fail(str(e), "check_error")
 
 
+def cmd_preflight(args):
+    """Standardized preflight check."""
+    result = {
+        "ready": False,
+        "dependencies": {
+            "python3": {"status": "ok", "hint": "Python 3 is running"},
+        },
+        "services": {
+            "quark_app": {"status": "not_running", "hint": "Launch Quark desktop APP"},
+        },
+        "hint": "",
+    }
+
+    try:
+        raw = http_get(f"{QUARK_APP}/desktop_info", timeout=5)
+        resp = json.loads(raw, strict=False)
+        is_login = resp.get("isLogin", False)
+        result["services"]["quark_app"]["status"] = "running"
+
+        if is_login:
+            result["ready"] = True
+            result["services"]["quark_app"]["hint"] = "Quark APP running and logged in"
+            result["hint"] = "All checks passed, ready to use"
+        else:
+            result["services"]["quark_app"]["hint"] = "Quark APP running but not logged in — log in first"
+            result["hint"] = "Quark APP needs login"
+    except urllib.error.URLError:
+        result["hint"] = "Quark APP not running (localhost:9128 refused)"
+    except Exception as e:
+        result["hint"] = f"Check error: {e}"
+
+    json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+    print()
+    if not result["ready"]:
+        sys.exit(1)
+
+
 def cmd_health(args):
     refresh = args.refresh
     try:
@@ -412,6 +449,9 @@ def main():
     # check
     sub.add_parser("check", help="Check Quark APP status")
 
+    # preflight
+    sub.add_parser("preflight", help="Standardized environment readiness check")
+
     # health
     p_health = sub.add_parser("health", help="Show PanSou health/channels/plugins")
     p_health.add_argument("--refresh", action="store_true", help="Force refresh cache")
@@ -428,6 +468,7 @@ def main():
         "detail": cmd_detail,
         "save": cmd_save,
         "check": cmd_check,
+        "preflight": cmd_preflight,
         "health": cmd_health,
     }
     handlers[args.command](args)

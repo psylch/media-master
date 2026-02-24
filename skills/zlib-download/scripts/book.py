@@ -502,6 +502,67 @@ def _find_annas_binary_silent() -> str:
     raise FileNotFoundError("annas-mcp not found")
 
 
+def cmd_preflight(args):
+    """Standardized preflight check with JSON output."""
+    cfg = load_config()
+    ready = False
+
+    # Check requests library
+    requests_ok = False
+    try:
+        import requests as _req
+        requests_ok = True
+    except ImportError:
+        pass
+
+    # Check Z-Library credentials
+    zlib_cfg = cfg.get("zlib", {})
+    zlib_configured = bool(zlib_cfg.get("email") or zlib_cfg.get("remix_userid"))
+
+    # Check Anna's Archive
+    annas_binary = _has_annas_binary()
+    annas_key = bool(cfg.get("annas", {}).get("secret_key"))
+
+    # Ready if at least one backend is usable
+    if requests_ok and zlib_configured:
+        ready = True
+    if annas_binary and annas_key:
+        ready = True
+
+    result = {
+        "ready": ready,
+        "dependencies": {
+            "python3": {"status": "ok", "hint": "Python 3 is running"},
+            "requests": {
+                "status": "ok" if requests_ok else "missing",
+                "hint": "Run: bash scripts/setup.sh install-deps",
+            },
+        },
+        "credentials": {
+            "zlib": {
+                "status": "configured" if zlib_configured else "not_configured",
+                "required": False,
+                "hint": "Edit ~/.claude/book-tools/.env with Z-Library email and password",
+            },
+            "annas_api_key": {
+                "status": "configured" if annas_key else "not_configured",
+                "required": False,
+                "hint": "Donate at Anna's Archive for API key, add to ~/.claude/book-tools/.env",
+            },
+        },
+        "services": {
+            "annas_binary": {
+                "status": "ok" if annas_binary else "missing",
+                "hint": "Run: bash scripts/setup.sh install-annas",
+            },
+        },
+        "hint": "Ready — at least one backend configured" if ready else "No backend fully configured. Set up Z-Library or Anna's Archive credentials.",
+    }
+    output(result)
+    if not ready:
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # CLI argument parsing
 # ---------------------------------------------------------------------------
@@ -565,6 +626,10 @@ def main():
     # -- setup --
     p_setup = sub.add_parser("setup", help="Check dependencies and backend status")
     p_setup.set_defaults(func=cmd_setup)
+
+    # -- preflight --
+    p_preflight = sub.add_parser("preflight", help="Standardized environment readiness check")
+    p_preflight.set_defaults(func=cmd_preflight)
 
     args = parser.parse_args()
     args.func(args)

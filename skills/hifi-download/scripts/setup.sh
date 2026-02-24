@@ -79,8 +79,49 @@ install() {
     echo "Setup complete!" >&2
 }
 
+preflight() {
+    local ready=true
+
+    # Dependencies
+    local python_ok=false venv_ok=false
+    command -v python3 > /dev/null 2>&1 && python_ok=true || ready=false
+    [ -d "$VENV_DIR" ] && venv_ok=true || ready=false
+
+    # Credentials
+    local env_status="not_configured"
+    [ -f "$SKILL_DIR/.env" ] && env_status="configured"
+
+    # Optional backends
+    local qobuz_status="not_installed" tidal_status="not_installed"
+    if $venv_ok; then
+        "$VENV_DIR/bin/python" -c "import qobuz_dl" 2>/dev/null && qobuz_status="ok"
+        command -v "$VENV_DIR/bin/tiddl" > /dev/null 2>&1 && tidal_status="ok"
+    fi
+
+    cat <<EOF
+{
+    "ready": $ready,
+    "dependencies": {
+        "python3": {"status": "$(if $python_ok; then echo ok; else echo missing; fi)", "hint": "Install Python 3: brew install python3"},
+        "venv": {"status": "$(if $venv_ok; then echo ok; else echo missing; fi)", "hint": "Run: bash scripts/setup.sh install"}
+    },
+    "credentials": {
+        "env_file": {"status": "$env_status", "required": true, "hint": "Copy .env.example to .env and fill in credentials"}
+    },
+    "services": {
+        "qobuz": {"status": "$qobuz_status", "hint": "Run: bash scripts/setup.sh install --with-qobuz"},
+        "tidal": {"status": "$tidal_status", "hint": "Run: bash scripts/setup.sh install --with-tidal"}
+    },
+    "hint": "$(if $ready; then echo 'Core dependencies ready'; else echo 'Some dependencies missing, see details'; fi)"
+}
+EOF
+
+    if ! $ready; then exit 1; fi
+}
+
 case "${1:-check}" in
     check) check ;;
+    preflight) preflight ;;
     install) shift; install "$@" ;;
-    *) echo "Usage: bash setup.sh check|install [--with-qobuz] [--with-tidal] [--force]" >&2; exit 1 ;;
+    *) echo "Usage: bash setup.sh check|preflight|install [--with-qobuz] [--with-tidal] [--force]" >&2; exit 1 ;;
 esac
