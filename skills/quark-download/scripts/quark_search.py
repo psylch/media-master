@@ -28,15 +28,16 @@ def log(msg):
     print(msg, file=sys.stderr)
 
 
-def ok(data):
-    json.dump({"ok": True, "data": data}, sys.stdout, ensure_ascii=False)
+def ok(data, hint=""):
+    out = {"status": "ok", "results": data, "hint": hint}
+    json.dump(out, sys.stdout, ensure_ascii=False)
     print()
 
 
-def fail(error, code="error"):
-    json.dump({"ok": False, "error": error, "code": code}, sys.stdout, ensure_ascii=False)
-    print()
-    sys.exit(1)
+def fail(error, code="error", hint="", recoverable=True):
+    json.dump({"error": code, "message": error, "hint": hint or error, "recoverable": recoverable}, sys.stderr, ensure_ascii=False)
+    print(file=sys.stderr)
+    sys.exit(1 if recoverable else 2)
 
 
 def http_get(url, timeout=15):
@@ -198,11 +199,13 @@ def cmd_search(args):
                          channels_csv=channels_csv, plugins_csv=plugins_csv)
 
     if resp.get("code", -1) != 0:
-        fail(f"PanSou error: {resp.get('message', 'unknown')}", "pansou_error")
+        fail(f"PanSou error: {resp.get('message', 'unknown')}", "pansou_error",
+             hint="PanSou API returned an error. Retry or try again later.")
 
     total = resp.get("data", {}).get("total", 0)
     if total == 0:
-        ok({"keyword": keyword, "total": 0, "results": []})
+        ok({"keyword": keyword, "total": 0, "results": []},
+           hint=f"No results found for '{keyword}'. Try different keywords.")
         return
 
     merged = resp.get("data", {}).get("merged_by_type", {})
@@ -213,7 +216,8 @@ def cmd_search(args):
         # report all types counts
         type_counts = {k: len(v) for k, v in merged.items() if v}
         ok({"keyword": keyword, "total": total, "quark_count": 0,
-            "type_counts": type_counts, "results": []})
+            "type_counts": type_counts, "results": []},
+           hint=f"No Quark results for '{keyword}', but {total} results exist on other drive types.")
         return
 
     candidates = quark_items[:limit]
@@ -237,7 +241,8 @@ def cmd_search(args):
                 "source": item.get("source", ""),
                 "datetime": item.get("datetime", ""),
             })
-        ok({"keyword": keyword, "total": total, "results": results})
+        ok({"keyword": keyword, "total": total, "results": results},
+           hint=f"Found {len(results)} results for '{keyword}' (validation skipped).")
         return
 
     # validate in parallel
@@ -285,7 +290,8 @@ def cmd_search(args):
         results.append(entry)
 
     ok({"keyword": keyword, "total": total, "valid_count": len(valid_items),
-        "results": results})
+        "results": results},
+       hint=f"Found {len(valid_items)} valid Quark links for '{keyword}', returning top {len(results)}.")
 
 
 # ── Save ───────────────────────────────────────────────────────────────
@@ -293,14 +299,16 @@ def cmd_search(args):
 def cmd_save(args):
     pwd_id = extract_pwd_id(args.pwd_id)
     if not pwd_id:
-        fail(f"Invalid pwd_id or URL: {args.pwd_id}", "invalid_id")
+        fail(f"Invalid pwd_id or URL: {args.pwd_id}", "invalid_id",
+             hint="Provide a valid Quark share URL or pwd_id.", recoverable=False)
 
     # Method 1: desktop_share_visiting
     try:
         log("Trying desktop_share_visiting...")
         raw = http_get(f"{QUARK_APP}/desktop_share_visiting?pwd_id={pwd_id}", timeout=5)
         resp = json.loads(raw, strict=False)
-        ok({"method": "desktop_share_visiting", "pwd_id": pwd_id, "response": resp})
+        ok({"method": "desktop_share_visiting", "pwd_id": pwd_id, "response": resp},
+           hint="Share opened in Quark APP via desktop_share_visiting.")
         return
     except Exception as e:
         log(f"Method 1 failed: {e}")
@@ -313,15 +321,16 @@ def cmd_save(args):
         caller_url = f"{QUARK_APP}/desktop_caller?deeplink=" + urllib.parse.quote(deeplink, safe="")
         raw = http_get(caller_url, timeout=5)
         resp = json.loads(raw, strict=False)
-        ok({"method": "desktop_caller", "pwd_id": pwd_id, "response": resp})
+        ok({"method": "desktop_caller", "pwd_id": pwd_id, "response": resp},
+           hint="Share opened in Quark APP via deeplink.")
         return
     except Exception as e:
         log(f"Method 2 failed: {e}")
 
     # Method 3: fallback browser open
     browser_url = f"https://pan.quark.cn/s/{pwd_id}"
-    ok({"method": "browser_fallback", "pwd_id": pwd_id, "url": browser_url,
-        "message": "APP methods failed. Open this URL in browser."})
+    ok({"method": "browser_fallback", "pwd_id": pwd_id, "url": browser_url},
+       hint="APP methods failed. Open the share URL in browser to save.")
 
 
 # ── Subcommand handlers ───────────────────────────────────────────────
@@ -336,17 +345,20 @@ def cmd_validate(args):
             log(f"Skipping invalid input: {s}")
 
     if not pwd_ids:
-        fail("No valid pwd_ids provided", "no_input")
+        fail("No valid pwd_ids provided", "no_input",
+             hint="Provide at least one valid Quark share URL or pwd_id.", recoverable=False)
 
     log(f"Validating {len(pwd_ids)} link(s)...")
     results = validate_many(pwd_ids)
-    ok({"results": results})
+    ok({"results": results},
+       hint=f"Validated {len(results)} link(s).")
 
 
 def cmd_detail(args):
     pwd_id = extract_pwd_id(args.pwd_id)
     if not pwd_id:
-        fail(f"Invalid pwd_id: {args.pwd_id}", "invalid_id")
+        fail(f"Invalid pwd_id: {args.pwd_id}", "invalid_id",
+             hint="Provide a valid Quark share URL or pwd_id.", recoverable=False)
 
     stoken = args.stoken
     pdir_fid = args.fid or "0"
@@ -355,19 +367,22 @@ def cmd_detail(args):
     result = fetch_detail(pwd_id, stoken, pdir_fid=pdir_fid)
 
     if "error" in result:
-        fail(result["error"], code=str(result.get("code", "error")))
-    ok(result)
+        fail(result["error"], code=str(result.get("code", "error")),
+             hint="Failed to fetch file details for this share.")
+    ok(result, hint=f"File listing for share {pwd_id}.")
 
 
 def cmd_check(args):
     try:
         raw = http_get(f"{QUARK_APP}/desktop_info", timeout=5)
         resp = json.loads(raw, strict=False)
-        ok(resp)
+        ok(resp, hint="Quark APP is running.")
     except urllib.error.URLError:
-        fail("Quark APP not running (localhost:9128 refused)", "app_not_running")
+        fail("Quark APP not running (localhost:9128 refused)", "app_not_running",
+             hint="Launch Quark desktop APP first.", recoverable=False)
     except Exception as e:
-        fail(str(e), "check_error")
+        fail(str(e), "check_error",
+             hint="Unexpected error checking Quark APP status.")
 
 
 def cmd_preflight(args):
@@ -413,9 +428,10 @@ def cmd_health(args):
         data = get_health(refresh=refresh)
         # remove internal timestamp from output
         out = {k: v for k, v in data.items() if not k.startswith("_")}
-        ok(out)
+        ok(out, hint="PanSou health data retrieved.")
     except Exception as e:
-        fail(str(e), "health_error")
+        fail(str(e), "health_error",
+             hint="Failed to fetch PanSou health data. Check network connectivity.")
 
 
 # ── Main ───────────────────────────────────────────────────────────────

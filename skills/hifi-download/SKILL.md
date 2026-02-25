@@ -7,6 +7,9 @@ description: Discover music, get personalized recommendations, and download high
 
 Music discovery (Spotify, Last.fm) and Hi-Res audio downloads (Qobuz, TIDAL) through a unified CLI.
 
+## Language
+**Match user's language**: Respond in the same language the user uses.
+
 All commands use `bash ${SKILL_PATH}/run.sh <script> [args...]`, which activates the venv and runs the corresponding Python script. Output is human-readable by default; use `--json` where supported for structured output.
 
 ## First-Time Setup
@@ -60,6 +63,21 @@ Shows which services are **READY**, **DISABLED**, or **need setup**. **Only use 
 |------|----------|---------|
 | Discovery | Spotify, Last.fm | Search, recommendations, similar artists |
 | Downloads | Qobuz, TIDAL | High-quality audio (FLAC, Hi-Res) |
+
+## Degradation Strategy
+
+All 4 services (Spotify, Last.fm, Qobuz, TIDAL) are optional. After running `status`, apply this table:
+
+| Scenario | Strategy |
+|----------|----------|
+| No Last.fm | **Skip & continue** — Use Spotify only for discovery |
+| No Spotify | **Skip & continue** — Use Last.fm only for discovery |
+| No discovery services at all | **Halt & guide** — Tell user at least one discovery service is needed and guide setup |
+| No Qobuz | **Auto-fallback** — Use TIDAL for downloads |
+| No TIDAL | **Auto-fallback** — Use Qobuz for downloads |
+| No download services at all | **Discovery only** — Inform user that downloads are unavailable, continue with discovery features only |
+
+When a fallback is used, tell the user which service is being used and why.
 
 ## Discovery Commands
 
@@ -176,13 +194,54 @@ bash ${SKILL_PATH}/run.sh enable_service spotify
 
 ## Workflow — Download Hi-Res Audio
 
+Print this checklist at the start, update as you go:
+
+```
+Download Progress:
+- [ ] Step 1: Check service status
+- [ ] Step 2: Search platform catalog
+- [ ] Step 3: Present results to user
+- [ ] Step 4: Start download
+- [ ] Step 5: Monitor progress
+- [ ] Step 6: Verify completion
+- [ ] Step 7: Report results
+```
+
 1. Run `status` to confirm download service is READY
 2. Search: `platform_search "Album Name" -p qobuz`
 3. Present results with quality info
 4. Download: `platform_download ID -p qobuz -t album` (returns download_id immediately)
 5. Tell user download is queued, optionally open `download_ui` for visual monitoring
 6. Poll with `download_status DOWNLOAD_ID` until completed
-7. Report download path and file size to user
+7. Report using the completion report template below
+
+## Completion Report
+
+After a download finishes, present this report to the user:
+
+```
+MusicMaster Download Complete!
+
+Input: [album/track] - [title] by [artist]
+Platform: [Qobuz/TIDAL]
+Quality: [Hi-Res 24-bit / FLAC 16-bit / etc.]
+
+Result:
+- Track count: [N tracks]
+- Total size: [X MB]
+- Download path: [/path/to/files]
+
+Files:
+- [file1.flac] (XX MB)
+- [file2.flac] (XX MB)
+- ...
+
+Next Steps:
+- Open folder: open "[download path]"
+- Download more: "download [another album]"
+```
+
+Gather file paths and sizes from the `download_status` output and by listing the download directory.
 
 ## Error Handling
 

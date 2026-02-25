@@ -7,6 +7,9 @@ description: Search and download books from Z-Library and Anna's Archive. Use wh
 
 Search and download books from multiple sources through a unified CLI.
 
+## Language
+**Match user's language**: Respond in the same language the user uses.
+
 ## Backends
 
 | Backend | Source | Auth Required | Best For |
@@ -14,23 +17,43 @@ Search and download books from multiple sources through a unified CLI.
 | **zlib** | Z-Library (EAPI) | Email + Password | Largest catalog, direct download |
 | **annas** | Anna's Archive | API Key (donation) | Aggregated sources, multiple mirrors |
 
-## First-Time Setup
+## Preflight
 
-On first invocation, run the setup check and guide the user through configuration interactively.
-
-### Step 1: Check Dependencies
+Before any workflow, run preflight to check environment readiness:
 
 ```bash
-bash ${SKILL_PATH}/scripts/setup.sh check
+python3 ${SKILL_PATH}/scripts/book.py preflight
 ```
 
-Output is key=value pairs. Check each:
+Returns standardized JSON:
+```json
+{
+  "ready": true,
+  "dependencies": { "python3": {"status": "ok"}, "requests": {"status": "ok"} },
+  "credentials": { "zlib": {"status": "configured"}, "annas_api_key": {"status": "not_configured"} },
+  "services": { "annas_binary": {"status": "ok"} }
+}
+```
 
-| Key | OK | Missing Action |
-|-----|----|----------------|
-| `PYTHON` | `ok` | Python 3 not found — user must install it |
-| `REQUESTS` | `ok` | Run `bash ${SKILL_PATH}/scripts/setup.sh install-deps` |
-| `ANNAS_BINARY` | `ok` | Run `bash ${SKILL_PATH}/scripts/setup.sh install-annas` (optional) |
+- If `ready: true` — proceed directly to the Workflow section.
+- If `ready: false` — follow the Check/Fix table below, then run the Setup flow.
+
+| Check | Fix |
+|-------|-----|
+| `requests` missing | `bash ${SKILL_PATH}/scripts/setup.sh install-deps` |
+| `zlib` not configured | Guide user to edit `~/.claude/book-tools/.env` with Z-Library credentials |
+| `annas_api_key` not configured | Guide user to donate at Anna's Archive for API key, add to `.env` |
+| `annas_binary` missing | `bash ${SKILL_PATH}/scripts/setup.sh install-annas` |
+
+## Setup (First-Time Only)
+
+Only run setup when preflight reports `ready: false`. Guide the user through configuration interactively.
+
+### Step 1: Install Dependencies
+
+```bash
+bash ${SKILL_PATH}/scripts/setup.sh install-deps
+```
 
 ### Step 2: Configure Credentials
 
@@ -58,27 +81,13 @@ ZLIB_PASSWORD=your_password_here
 3. Wait for the user to confirm they've filled it in
 4. Then proceed with search
 
-Alternatively, credentials can be set via CLI (less recommended — visible in shell history):
-
-```bash
-python3 ${SKILL_PATH}/scripts/book.py config set --zlib-email "user@example.com" --zlib-password "password"
-```
-
 ### Step 3: Verify
 
 ```bash
-python3 ${SKILL_PATH}/scripts/book.py setup
+python3 ${SKILL_PATH}/scripts/book.py preflight
 ```
 
-Expected output when Z-Library is configured:
-```json
-{
-  "zlib": { "requests_installed": true, "configured": true },
-  "annas": { "binary_found": true, "api_key_configured": false }
-}
-```
-
-If `configured` is `true`, the skill is ready to use.
+Confirm `ready: true` before proceeding.
 
 ### Credential Storage Details
 
@@ -169,10 +178,17 @@ python3 ${SKILL_PATH}/scripts/book.py download --source annas --hash a1b2c3d4e5 
 
 ### 4. Report to User
 
-After download, report:
-- File path (so user can open it)
-- File size
-- Any remaining download quota (Z-Library has daily limits)
+After download, present a structured completion report:
+
+```
+[Book Download] Complete!
+Book: [title] by [author]
+Source: [zlib/annas]
+Path: [file path]
+Size: [file size]
+```
+
+If using Z-Library, also mention any remaining daily download quota.
 
 ## Other Commands
 
@@ -206,6 +222,14 @@ python3 ${SKILL_PATH}/scripts/book.py setup
 | "Anna's Archive API key not configured" | No API key | Guide user to donate at Anna's Archive for API access, then add key to `.env` |
 | Search timeout | Network issue | Retry once. If persistent, try the other backend. |
 | "No backend available" | Neither backend configured | Walk through full setup flow from Step 1 |
+
+## Degradation
+
+| Scenario | Behavior |
+|----------|----------|
+| Z-Library down | Auto-fallback to Anna's Archive (`--source auto` handles this) |
+| Anna's Archive unavailable | Use Z-Library only |
+| Neither configured | Halt and guide user through Setup flow |
 
 ## Tips
 

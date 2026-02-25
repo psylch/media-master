@@ -299,11 +299,12 @@ def main():
             print(format_human_readable(status))
 
     except Exception as e:
-        if args.json:
-            print(json.dumps({"error": str(e)}))
-        else:
-            print(f"Error: {e}")
-        sys.exit(1)
+        print(json.dumps({
+            "error": str(type(e).__name__),
+            "hint": str(e),
+            "recoverable": False
+        }), file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

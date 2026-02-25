@@ -21,11 +21,20 @@ from lib.download_state import (
 from lib.platform import get_platform_service
 
 
+def error_exit(error: str, hint: str, recoverable: bool = True, exit_code: int = 1):
+    """Print structured JSON error to stderr and exit."""
+    print(json.dumps({"error": error, "hint": hint, "recoverable": recoverable}), file=sys.stderr)
+    sys.exit(exit_code)
+
+
 def validate_config(platform: str, config: Config):
     """Exit with an error if the platform is not configured."""
     if platform == "qobuz" and not config.qobuz.is_configured():
-        print("Error: Qobuz not configured. Set QOBUZ_EMAIL and QOBUZ_PASSWORD.", file=sys.stderr)
-        sys.exit(1)
+        error_exit(
+            "qobuz_not_configured",
+            "Set QOBUZ_EMAIL and QOBUZ_PASSWORD in .env, or run setup_config with --qobuz-email and --qobuz-password.",
+            recoverable=True,
+        )
 
 
 def progress_callback(done: int, total: int):
@@ -103,8 +112,12 @@ def main():
         else:
             run_async(args)
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        error_exit(
+            str(type(e).__name__),
+            str(e),
+            recoverable=False,
+            exit_code=2,
+        )
 
 
 if __name__ == "__main__":

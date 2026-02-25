@@ -72,8 +72,8 @@ def output(data):
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
-def die(msg: str, code: int = 1):
-    print(json.dumps({"error": msg}), file=sys.stderr)
+def die(msg: str, hint: str = "", code: int = 1, recoverable: bool = True):
+    print(json.dumps({"error": msg, "hint": hint or msg, "recoverable": recoverable}), file=sys.stderr)
     sys.exit(code)
 
 

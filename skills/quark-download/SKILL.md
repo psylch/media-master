@@ -5,21 +5,27 @@ description: Search, validate, and save cloud drive resources via PanSou aggrega
 
 # Quark Search — 网盘资源搜索与下载
 
+## Language
+**Match user's language**: Respond in the same language the user uses.
+
 Automate the full workflow: search resources → validate links → save to Quark cloud drive → download locally, by combining the PanSou aggregation API with the local Quark desktop APP.
 
-All operations use the CLI script at `${SKILL_PATH}/scripts/quark_search.py`. It outputs JSON to stdout (`{"ok": true, "data": {...}}` or `{"ok": false, "error": "...", "code": "..."}`) and logs progress to stderr.
+All operations use the CLI script at `${SKILL_PATH}/scripts/quark_search.py`. It outputs JSON to stdout (`{"status": "ok", "results": {...}, "hint": "..."}`) and errors to stderr (`{"error": "code", "message": "...", "hint": "...", "recoverable": true/false}`). Exit codes: 0 = success, 1 = recoverable error, 2 = fatal error.
 
-## Prerequisites Check
+## Preflight
 
 Before any operation, verify the environment:
 
 ```bash
-python3 ${SKILL_PATH}/scripts/quark_search.py check
+python3 ${SKILL_PATH}/scripts/quark_search.py preflight
 ```
 
-**Response:** `{"ok": true, "data": {"isLogin": true, ...}}` — confirms APP is running and logged in.
+**Response:** Standardized JSON with `ready: true/false`, `dependencies`, and `services` status. If `ready: true`, proceed. If `ready: false`, follow the hints.
 
-If the command fails with `"code": "app_not_running"`, instruct the user to launch Quark APP. If `isLogin` is `false`, instruct the user to log in first.
+| Check | Fix |
+|-------|-----|
+| Quark APP not running | Launch Quark desktop APP |
+| Quark APP not logged in | Log in with membership account |
 
 ## Workflow — Quick Search (recommended)
 
@@ -38,12 +44,13 @@ python3 ${SKILL_PATH}/scripts/quark_search.py search "KEYWORD" --top 5
 | `--limit N` | `30` | PanSou results per page |
 | `--page N` | `1` | PanSou page number |
 
-**Success response (`ok: true`):**
+**Success response:**
 
 ```json
 {
-  "ok": true,
-  "data": {
+  "status": "ok",
+  "hint": "Found 8 valid Quark links for '三体', returning top 5.",
+  "results": {
     "keyword": "三体",
     "total": 1234,
     "valid_count": 8,
@@ -153,16 +160,39 @@ If the response method is `browser_fallback`, open the URL in the browser instea
 
 When the user wants to search and save multiple resources, loop through the search → present → save workflow for each keyword. Validate all links first via the `search` command, then trigger APP saves sequentially.
 
+## Completion Report
+
+After a successful save, present this summary to the user:
+
+```
+[Quark Download] Complete!
+Resource: [title]
+Share: [URL]
+Method: [save method used]
+→ Click "保存到网盘" in Quark APP to complete
+```
+
 ## Error Handling
 
 | Error | Detection | Resolution |
 |-------|-----------|------------|
-| Quark APP not running | `check` returns `code: "app_not_running"` | Tell user to launch Quark APP |
-| Not logged in | `check` returns `isLogin: false` | Tell user to log in |
+| Quark APP not running | `preflight` returns `ready: false`, service `not_running` | Tell user to launch Quark APP |
+| Not logged in | `preflight` returns `ready: false`, hint mentions login | Tell user to log in |
 | No search results | `search` returns `total: 0` | Suggest different keywords |
 | All links invalid | `search` returns `valid_count: 0` | Try alternative keywords or drive types |
 | Share has password | `validate` returns password required error | Ask user for the extraction code (提取码) |
-| PanSou API error | `search` returns `code: "pansou_error"` | Retry or try later |
+| PanSou API error | `search` returns `error: "pansou_error"` | Retry or try later |
+
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `localhost:9128 refused` | Quark APP not running | Launch Quark desktop APP |
+| `preflight` passes but `save` fails | APP window minimized or hidden | Check taskbar/Dock for Quark icon, bring window to front |
+| Search returns results but all invalid | Resources expired or removed | Try different keywords or broaden search terms |
+| `pansou_error` on every search | PanSou API down or network issue | Wait and retry later; check network connectivity |
+| `browser_fallback` method used | Quark APP local API not responding | Restart Quark APP; ensure it's the desktop version (not mobile) |
+| Detail returns empty file list | Share requires extraction code (提取码) | Ask user for the code and re-validate with passcode |
 
 ## Important Notes
 
