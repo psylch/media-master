@@ -33,7 +33,7 @@ Examples:
   python scripts/enable_service.py tidal
 
 After enabling, you may still need to configure credentials
-using setup_config.py if not already done.
+by editing .env if not already done.
 """
     )
 
@@ -55,21 +55,21 @@ using setup_config.py if not already done.
     if args.service == "spotify" and not config.spotify.is_configured():
         needs_config = True
         print("Note: Spotify credentials not configured yet.")
-        print("Run: setup_config.py --spotify-id=... --spotify-secret=...")
+        print("Edit .env: set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET")
     elif args.service == "lastfm" and not config.lastfm.is_configured():
         needs_config = True
         print("Note: Last.fm API key not configured yet.")
-        print("Run: setup_config.py --lastfm-key=...")
+        print("Edit .env: set LASTFM_API_KEY")
     elif args.service == "qobuz" and not config.qobuz.is_configured():
         needs_config = True
         print("Note: Qobuz credentials not configured yet.")
-        print("Run: setup_config.py --qobuz-email=... --qobuz-password=...")
+        print("Edit .env: set QOBUZ_EMAIL and QOBUZ_PASSWORD")
     elif args.service == "tidal":
-        tidal_config = Path.home() / ".tidal-dl.json"
+        tidal_config = Path.home() / "tiddl.json"
         if not tidal_config.exists():
             needs_config = True
             print("Note: TIDAL not logged in yet.")
-            print("Run: tidal-dl")
+            print("Run: tiddl auth login")
 
     if not needs_config:
         print("Service is ready to use.")

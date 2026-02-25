@@ -49,8 +49,8 @@ book.py config reset                        # Delete all config
 ```
 
 Config set options:
-- `--zlib-email` / `--zlib-password` — Z-Library credentials
-- `--annas-key` — Anna's Archive API key
+- `--zlib-email` — Z-Library email (password must be set in `~/.claude/book-tools/.env`)
+- `--annas-key` — Anna's Archive API key (prefer setting `ANNAS_SECRET_KEY` in `~/.claude/book-tools/.env`)
 - `--annas-binary` — Path to annas-mcp binary
 - `--annas-download-path` — Download directory for Anna's Archive
 - `--annas-mirror` — Alternative mirror URL

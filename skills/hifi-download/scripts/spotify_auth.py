@@ -30,7 +30,7 @@ def main():
 
         if not config.spotify.is_configured():
             print("Error: Spotify credentials not configured.")
-            print("Run setup_config.py first.")
+            print("Edit .env: set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET first.")
             sys.exit(1)
 
         import spotipy

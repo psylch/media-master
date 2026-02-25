@@ -6,11 +6,9 @@
 # 1. Install dependencies (creates .venv automatically)
 bash ${SKILL_PATH}/scripts/setup.sh install --with-qobuz --with-tidal
 
-# 2. Configure credentials
-bash ${SKILL_PATH}/run.sh setup_config \
-    --spotify-id=YOUR_ID \
-    --spotify-secret=YOUR_SECRET \
-    --lastfm-key=YOUR_KEY
+# 2. Configure credentials (edit .env file)
+cp ${SKILL_PATH}/.env.example ${SKILL_PATH}/.env
+# Then edit .env with your credentials
 
 # 3. Verify
 bash ${SKILL_PATH}/run.sh status

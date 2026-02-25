@@ -40,10 +40,11 @@ Returns standardized JSON:
 
 | Check | Fix |
 |-------|-----|
-| `requests` missing | `bash ${SKILL_PATH}/scripts/setup.sh install-deps` |
-| `zlib` not configured | Guide user to edit `~/.claude/book-tools/.env` with Z-Library credentials |
-| `annas_api_key` not configured | Guide user to donate at Anna's Archive for API key, add to `.env` |
-| `annas_binary` missing | `bash ${SKILL_PATH}/scripts/setup.sh install-annas` |
+| `requests` missing | `bash ${SKILL_PATH}/scripts/setup.sh install-deps` (or manually: `pip3 install requests` / `uv pip install requests`) |
+| `zlib` not configured | Guide user to edit `~/.claude/book-tools/.env` — set `ZLIB_EMAIL` and `ZLIB_PASSWORD` |
+| `zlib` expired | Cached tokens expired and no email/password in `.env`. Guide user to re-add credentials to `~/.claude/book-tools/.env` |
+| `annas_api_key` not configured | Guide user to donate at Anna's Archive for API key, then add `ANNAS_SECRET_KEY` to `~/.claude/book-tools/.env` |
+| `annas_binary` missing | `bash ${SKILL_PATH}/scripts/setup.sh install-annas` (or manually: download from [annas-mcp releases](https://github.com/iosifache/annas-mcp/releases), extract to `~/.local/bin/annas-mcp`) |
 
 ## Setup (First-Time Only)
 
@@ -61,7 +62,12 @@ Credentials are stored in `~/.claude/book-tools/.env`. Create the file from the 
 
 ```bash
 mkdir -p ~/.claude/book-tools
-cp ${SKILL_PATH}/scripts/.env.example ~/.claude/book-tools/.env
+# Only copy if .env does not already exist — never overwrite existing credentials
+if [ ! -f ~/.claude/book-tools/.env ]; then
+  cp ${SKILL_PATH}/scripts/.env.example ~/.claude/book-tools/.env
+else
+  echo "Existing .env found — skipping copy to preserve your credentials."
+fi
 ```
 
 The `.env` file looks like this:
@@ -89,16 +95,17 @@ python3 ${SKILL_PATH}/scripts/book.py preflight
 
 Confirm `ready: true` before proceeding.
 
-### Credential Storage Details
+### Credential Storage
 
-Two sources are merged (`.env` values take priority):
+**Canonical path**: `~/.claude/book-tools/.env` — this is the single place users should edit credentials.
 
-| Source | Path | Format |
-|--------|------|--------|
-| `.env` file | `~/.claude/book-tools/.env` | `KEY=value` per line |
-| Config JSON | `~/.claude/book-tools/config.json` | JSON (auto-managed) |
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `ZLIB_EMAIL` | Z-Library email | For Z-Library backend |
+| `ZLIB_PASSWORD` | Z-Library password | For Z-Library backend |
+| `ANNAS_SECRET_KEY` | Anna's Archive API key | For Anna's Archive backend |
 
-On first successful Z-Library login, remix tokens are cached in `config.json` — subsequent calls skip the email/password login and use tokens directly.
+On first successful Z-Library login, session tokens are automatically cached in `~/.claude/book-tools/config.json` for performance. This file is auto-managed — do not edit it manually. If login issues occur, delete `config.json` and the script will re-login using `.env` credentials.
 
 ## Workflow
 

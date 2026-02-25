@@ -25,6 +25,60 @@ from lib.config import Config
 from lib.preferences import Preferences
 
 
+def _validate_lastfm(api_key: str) -> tuple:
+    """Lightweight live validation of Last.fm API key."""
+    try:
+        import requests
+        resp = requests.get(
+            "http://ws.audioscrobbler.com/2.0/",
+            params={
+                "method": "artist.getSimilar",
+                "artist": "Radiohead",
+                "limit": 1,
+                "api_key": api_key,
+                "format": "json"
+            },
+            timeout=10
+        )
+        data = resp.json()
+        if "error" in data:
+            return False, f"Invalid API key: {data.get('message', 'unknown error')}"
+        return True, None
+    except Exception as e:
+        return False, f"API unreachable: {e}"
+
+
+def _validate_spotify(client_id: str, client_secret: str) -> tuple:
+    """Lightweight live validation of Spotify credentials."""
+    try:
+        import spotipy
+        from spotipy.oauth2 import SpotifyClientCredentials
+        auth = SpotifyClientCredentials(
+            client_id=client_id,
+            client_secret=client_secret
+        )
+        sp = spotipy.Spotify(auth_manager=auth)
+        sp.search("test", limit=1)
+        return True, None
+    except Exception as e:
+        return False, f"Auth failed: {e}"
+
+
+def _validate_qobuz(email: str, password: str, quality: int, download_path: str) -> tuple:
+    """Lightweight live validation of Qobuz credentials."""
+    try:
+        from qobuz_dl.core import QobuzDL
+        qobuz = QobuzDL(directory=download_path, quality=quality)
+        qobuz.get_tokens()
+        qobuz.initialize_client(email, password, qobuz.app_id, qobuz.secrets)
+        return True, None
+    except ImportError:
+        # qobuz-dl not installed -- can't validate, but credentials exist
+        return True, None
+    except Exception as e:
+        return False, f"Login failed: {e}"
+
+
 def get_service_status(config: Config, prefs: Preferences) -> dict:
     """Get comprehensive status of all services."""
     status = {
@@ -47,19 +101,26 @@ def get_service_status(config: Config, prefs: Preferences) -> dict:
         }
         status["summary"]["disabled_services"].append("spotify")
     elif config.spotify.is_configured():
-        status["discovery"]["spotify"] = {
-            "status": "ready",
-            "available": True
-        }
-        status["summary"]["available_discovery"].append("spotify")
-        # Auto-enable if configured but not explicitly set
-        if prefs.spotify.is_not_configured():
-            prefs.enable_service("spotify")
+        # Live validation: test actual API access
+        valid, err = _validate_spotify(config.spotify.client_id, config.spotify.client_secret)
+        if valid:
+            status["discovery"]["spotify"] = {
+                "status": "ready",
+                "available": True
+            }
+            status["summary"]["available_discovery"].append("spotify")
+        else:
+            status["discovery"]["spotify"] = {
+                "status": "error",
+                "available": False,
+                "setup_hint": f"Credentials configured but validation failed: {err}"
+            }
+            status["summary"]["needs_setup"].append("spotify")
     else:
         status["discovery"]["spotify"] = {
             "status": "not_configured",
             "available": False,
-            "setup_hint": "Run setup_config.py with --spotify-id and --spotify-secret"
+            "setup_hint": "Edit .env: set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET (get from https://developer.spotify.com/dashboard)"
         }
         if not prefs.spotify.is_disabled():
             status["summary"]["needs_setup"].append("spotify")
@@ -73,18 +134,26 @@ def get_service_status(config: Config, prefs: Preferences) -> dict:
         }
         status["summary"]["disabled_services"].append("lastfm")
     elif config.lastfm.is_configured():
-        status["discovery"]["lastfm"] = {
-            "status": "ready",
-            "available": True
-        }
-        status["summary"]["available_discovery"].append("lastfm")
-        if prefs.lastfm.is_not_configured():
-            prefs.enable_service("lastfm")
+        # Live validation: test actual API access
+        valid, err = _validate_lastfm(config.lastfm.api_key)
+        if valid:
+            status["discovery"]["lastfm"] = {
+                "status": "ready",
+                "available": True
+            }
+            status["summary"]["available_discovery"].append("lastfm")
+        else:
+            status["discovery"]["lastfm"] = {
+                "status": "error",
+                "available": False,
+                "setup_hint": f"API key configured but validation failed: {err}"
+            }
+            status["summary"]["needs_setup"].append("lastfm")
     else:
         status["discovery"]["lastfm"] = {
             "status": "not_configured",
             "available": False,
-            "setup_hint": "Run setup_config.py with --lastfm-key"
+            "setup_hint": "Edit .env: set LASTFM_API_KEY (get from https://www.last.fm/api/account/create)"
         }
         if not prefs.lastfm.is_disabled():
             status["summary"]["needs_setup"].append("lastfm")
@@ -99,20 +168,31 @@ def get_service_status(config: Config, prefs: Preferences) -> dict:
         status["summary"]["disabled_services"].append("qobuz")
     elif config.qobuz.is_configured():
         quality_map = {5: "MP3 320kbps", 6: "FLAC 16-bit", 7: "FLAC 24-bit", 27: "Hi-Res 24-bit"}
-        status["downloads"]["qobuz"] = {
-            "status": "ready",
-            "available": True,
-            "quality": quality_map.get(config.qobuz.quality, f"Quality {config.qobuz.quality}"),
-            "download_path": config.qobuz.download_path
-        }
-        status["summary"]["available_downloads"].append("qobuz")
-        if prefs.qobuz.is_not_configured():
-            prefs.enable_service("qobuz")
+        # Live validation: test actual Qobuz login
+        valid, err = _validate_qobuz(
+            config.qobuz.email, config.qobuz.password,
+            config.qobuz.quality, config.qobuz.download_path
+        )
+        if valid:
+            status["downloads"]["qobuz"] = {
+                "status": "ready",
+                "available": True,
+                "quality": quality_map.get(config.qobuz.quality, f"Quality {config.qobuz.quality}"),
+                "download_path": config.qobuz.download_path
+            }
+            status["summary"]["available_downloads"].append("qobuz")
+        else:
+            status["downloads"]["qobuz"] = {
+                "status": "error",
+                "available": False,
+                "setup_hint": f"Credentials configured but validation failed: {err}"
+            }
+            status["summary"]["needs_setup"].append("qobuz")
     else:
         status["downloads"]["qobuz"] = {
             "status": "not_configured",
             "available": False,
-            "setup_hint": "Run setup_config.py with --qobuz-email and --qobuz-password"
+            "setup_hint": "Edit .env: set QOBUZ_EMAIL and QOBUZ_PASSWORD (requires Qobuz Studio/Sublime subscription)"
         }
         if not prefs.qobuz.is_disabled():
             status["summary"]["needs_setup"].append("qobuz")
@@ -188,8 +268,6 @@ def get_service_status(config: Config, prefs: Preferences) -> dict:
                 "user_id": tidal_user
             }
             status["summary"]["available_downloads"].append("tidal")
-            if prefs.tidal.is_not_configured():
-                prefs.enable_service("tidal")
         elif tidal_error:
             status["downloads"]["tidal"] = {
                 "status": "error",
@@ -224,6 +302,9 @@ def format_human_readable(status: dict) -> str:
             lines.append(f"  {name.capitalize()}: READY")
         elif info["status"] == "disabled":
             lines.append(f"  {name.capitalize()}: DISABLED ({info.get('reason', 'user choice')})")
+        elif info["status"] == "error":
+            hint = info.get('setup_hint', 'Unknown error')
+            lines.append(f"  {name.capitalize()}: ERROR ({hint})")
         else:
             lines.append(f"  {name.capitalize()}: NOT CONFIGURED")
 
@@ -262,7 +343,7 @@ def format_human_readable(status: dict) -> str:
 
     if summary["needs_setup"]:
         lines.append(f"Needs setup: {', '.join(summary['needs_setup'])}")
-        lines.append("(Use 'disable' command to skip, or run setup_config.py to configure)")
+        lines.append("(Use 'disable' command to skip, or edit .env to configure credentials)")
         lines.append("")
 
     # Quick command reference based on available services

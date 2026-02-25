@@ -84,13 +84,39 @@ def check_qobuz(config):
 def check_tidal(config):
     """Check TIDAL configuration."""
     try:
-        from TIDALDL.tidal import TidalAPI
-        api = TidalAPI()
-        if api.isLogin():
-            return True, f"Connected (quality: {config.tidal.quality})"
-        return False, "Not logged in. Run 'tidal-dl' to authenticate."
-    except ImportError:
-        return False, "tidal-dl not installed (pip install tidal-dl)"
+        import json
+        import time
+        tiddl_config_path = Path.home() / "tiddl.json"
+        if not tiddl_config_path.exists():
+            return False, "Not configured. Run: tiddl auth login"
+
+        with open(tiddl_config_path) as f:
+            tiddl_config = json.load(f)
+
+        auth = tiddl_config.get("auth", {})
+        if not auth.get("token") or not auth.get("user_id"):
+            return False, "No valid token found. Run: tiddl auth login"
+
+        expires = auth.get("expires", 0)
+        if expires and time.time() > expires:
+            # Attempt auto-refresh before reporting failure
+            import subprocess
+            venv_bin = Path(__file__).parent.parent / ".venv" / "bin"
+            tiddl_path = venv_bin / "tiddl"
+            if tiddl_path.exists():
+                result = subprocess.run(
+                    [str(tiddl_path), "auth", "refresh"],
+                    capture_output=True, text=True, timeout=30
+                )
+                if result.returncode == 0:
+                    # Re-read config after refresh
+                    with open(tiddl_config_path) as f2:
+                        tiddl_config = json.load(f2)
+                    auth = tiddl_config.get("auth", {})
+                    return True, f"Token refreshed. Connected as user {auth.get('user_id')} (quality: {config.tidal.quality})"
+            return False, "Token expired and refresh failed. Run: tiddl auth login"
+
+        return True, f"Connected as user {auth.get('user_id')} (quality: {config.tidal.quality})"
     except Exception as e:
         return False, f"Error: {e}"
 
@@ -110,7 +136,8 @@ def main():
     ]
 
     all_ok = True
-    required_ok = True
+    discovery_ok = False
+    download_ok = False
 
     for name, checker in services:
         ok, message = checker(config)
@@ -121,20 +148,24 @@ def main():
 
         if not ok:
             all_ok = False
-            if name in ["Spotify", "Last.fm"]:
-                required_ok = False
+        if ok and name in ["Spotify", "Last.fm"]:
+            discovery_ok = True
+        if ok and name in ["Qobuz", "TIDAL"]:
+            download_ok = True
 
     print("=" * 50)
 
     if all_ok:
         print("\nAll services configured and connected!")
-    elif required_ok:
-        print("\nRequired services (Spotify, Last.fm) are working.")
-        print("Download services (Qobuz/TIDAL) are optional.")
+    elif discovery_ok:
+        print("\nAt least one discovery service is working.")
+        if not download_ok:
+            print("No download services configured (optional).")
+        print("MusicMaster is ready to use.")
     else:
-        print("\nRequired services not configured.")
-        print("Please configure Spotify and Last.fm to use MusicMaster.")
-        print("\nSee setup guide for configuration instructions.")
+        print("\nNo discovery services configured.")
+        print("At least one of Spotify or Last.fm is needed for music discovery.")
+        print("Edit .env to configure credentials (see Preflight Check -> Fix Table).")
         sys.exit(1)
 
 

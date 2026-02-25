@@ -82,7 +82,14 @@ def die(msg: str, hint: str = "", code: int = 1, recoverable: bool = True):
 # ---------------------------------------------------------------------------
 
 def _get_zlib():
-    """Return an authenticated Zlibrary instance."""
+    """Return an authenticated Zlibrary instance.
+
+    Token refresh strategy (see best_practices.md § Error Recovery):
+      1. Try cached remix tokens → if logged in, return immediately
+      2. If not logged in AND email/password available → fresh login
+      3. On fresh login success → update cached tokens in config
+      4. If nothing works → die with actionable hint
+    """
     cfg = load_config()
     zlib_cfg = cfg.get("zlib", {})
 
@@ -94,9 +101,15 @@ def _get_zlib():
     email = zlib_cfg.get("email")
     password = zlib_cfg.get("password")
 
+    # Step 1: Try cached tokens
     if remix_userid and remix_userkey:
         z = Zlibrary(remix_userid=remix_userid, remix_userkey=remix_userkey)
-    elif email and password:
+        if z.isLoggedIn():
+            return z
+        # Cached tokens expired — fall through to fresh login
+
+    # Step 2: Try fresh login with email/password
+    if email and password:
         z = Zlibrary(email=email, password=password)
         if z.isLoggedIn():
             # Cache tokens for next time
@@ -107,12 +120,13 @@ def _get_zlib():
                 cfg["zlib"]["remix_userid"] = str(user["id"])
                 cfg["zlib"]["remix_userkey"] = user["remix_userkey"]
                 save_config(cfg)
-    else:
-        die("Z-Library not configured. Run: book.py config set --zlib-email <email> --zlib-password <password>")
+            return z
 
-    if not z.isLoggedIn():
-        die("Z-Library login failed. Check credentials.")
-    return z
+    # Step 3: No valid credentials
+    if not email and not password and not remix_userid:
+        die("Z-Library not configured. Edit ~/.claude/book-tools/.env with your ZLIB_EMAIL and ZLIB_PASSWORD.")
+    else:
+        die("Z-Library login failed. Check credentials in ~/.claude/book-tools/.env")
 
 
 def zlib_search(args):
@@ -203,10 +217,11 @@ def _find_annas_binary() -> str:
             return str(loc)
 
     die(
-        "annas-mcp binary not found. Install it:\n"
-        "  1. Download from https://github.com/iosifache/annas-mcp/releases\n"
-        "  2. Extract and move to ~/.local/bin/annas-mcp\n"
-        "  3. Or run: book.py config set --annas-binary /path/to/annas-mcp"
+        "annas-mcp binary not found",
+        hint="Install it:\n"
+        "  1. Run: bash ${SKILL_PATH}/scripts/setup.sh install-annas\n"
+        "  2. Or manually: download from https://github.com/iosifache/annas-mcp/releases, "
+        "extract and move to ~/.local/bin/annas-mcp",
     )
 
 
@@ -280,7 +295,7 @@ def annas_search(args):
     cfg = load_config()
 
     if not cfg.get("annas", {}).get("secret_key"):
-        die("Anna's Archive API key not configured. Run: book.py config set --annas-key <key>\n"
+        die("Anna's Archive API key not configured. Add ANNAS_SECRET_KEY to ~/.claude/book-tools/.env\n"
             "Get a key by donating to Anna's Archive.")
 
     env = _annas_env()
@@ -310,7 +325,7 @@ def annas_download(args):
     cfg = load_config()
 
     if not cfg.get("annas", {}).get("secret_key"):
-        die("Anna's Archive API key not configured. Run: book.py config set --annas-key <key>")
+        die("Anna's Archive API key not configured. Add ANNAS_SECRET_KEY to ~/.claude/book-tools/.env")
 
     filename = args.filename
     if not filename:
@@ -368,9 +383,9 @@ def cmd_search(args):
         else:
             errors.append("annas: not configured")
 
-        die("No backend available. Configure at least one:\n"
-            "  Z-Library: book.py config set --zlib-email <email> --zlib-password <pw>\n"
-            "  Anna's Archive: book.py config set --annas-key <key>\n"
+        die("No backend available. Configure at least one in ~/.claude/book-tools/.env:\n"
+            "  Z-Library: set ZLIB_EMAIL and ZLIB_PASSWORD\n"
+            "  Anna's Archive: set ANNAS_SECRET_KEY\n"
             f"Details: {'; '.join(errors)}")
 
 
@@ -407,20 +422,6 @@ def cmd_config(args):
 
     elif args.config_action == "set":
         cfg = load_config()
-
-        if args.zlib_email or args.zlib_password:
-            cfg.setdefault("zlib", {})
-            if args.zlib_email:
-                cfg["zlib"]["email"] = args.zlib_email
-            if args.zlib_password:
-                cfg["zlib"]["password"] = args.zlib_password
-            # Clear cached tokens when credentials change
-            cfg["zlib"].pop("remix_userid", None)
-            cfg["zlib"].pop("remix_userkey", None)
-
-        if args.annas_key:
-            cfg.setdefault("annas", {})
-            cfg["annas"]["secret_key"] = args.annas_key
 
         if args.annas_binary:
             cfg.setdefault("annas", {})
@@ -515,16 +516,51 @@ def cmd_preflight(args):
     except ImportError:
         pass
 
-    # Check Z-Library credentials
+    # Check Z-Library credentials with live validation
     zlib_cfg = cfg.get("zlib", {})
-    zlib_configured = bool(zlib_cfg.get("email") or zlib_cfg.get("remix_userid"))
+    zlib_has_tokens = bool(zlib_cfg.get("remix_userid") and zlib_cfg.get("remix_userkey"))
+    zlib_has_email = bool(zlib_cfg.get("email") and zlib_cfg.get("password"))
+    zlib_status = "not_configured"
+    zlib_hint = "Edit ~/.claude/book-tools/.env with ZLIB_EMAIL and ZLIB_PASSWORD"
+
+    if requests_ok and (zlib_has_tokens or zlib_has_email):
+        # Attempt live validation with cached tokens
+        if zlib_has_tokens:
+            try:
+                sys.path.insert(0, str(SCRIPT_DIR))
+                from Zlibrary import Zlibrary
+                z = Zlibrary(
+                    remix_userid=zlib_cfg["remix_userid"],
+                    remix_userkey=zlib_cfg["remix_userkey"],
+                )
+                if z.isLoggedIn():
+                    zlib_status = "valid"
+                    zlib_hint = "Z-Library tokens are valid"
+                elif zlib_has_email:
+                    # Tokens expired but email/password available for re-login
+                    zlib_status = "configured"
+                    zlib_hint = "Cached tokens expired; will re-login with email/password on next use"
+                else:
+                    zlib_status = "expired"
+                    zlib_hint = "Cached tokens expired and no email/password available. Edit ~/.claude/book-tools/.env"
+            except Exception:
+                if zlib_has_email:
+                    zlib_status = "configured"
+                    zlib_hint = "Token validation failed; will attempt email/password login on next use"
+                else:
+                    zlib_status = "configured"
+                    zlib_hint = "Token validation could not be performed"
+        else:
+            # Only email/password, no cached tokens yet — can attempt login on use
+            zlib_status = "configured"
+            zlib_hint = "Email/password set; will login on first use"
 
     # Check Anna's Archive
     annas_binary = _has_annas_binary()
     annas_key = bool(cfg.get("annas", {}).get("secret_key"))
 
     # Ready if at least one backend is usable
-    if requests_ok and zlib_configured:
+    if requests_ok and zlib_status in ("valid", "configured"):
         ready = True
     if annas_binary and annas_key:
         ready = True
@@ -535,28 +571,28 @@ def cmd_preflight(args):
             "python3": {"status": "ok", "hint": "Python 3 is running"},
             "requests": {
                 "status": "ok" if requests_ok else "missing",
-                "hint": "Run: bash scripts/setup.sh install-deps",
+                "hint": "Run: bash ${SKILL_PATH}/scripts/setup.sh install-deps (or: pip3 install requests)",
             },
         },
         "credentials": {
             "zlib": {
-                "status": "configured" if zlib_configured else "not_configured",
+                "status": zlib_status,
                 "required": False,
-                "hint": "Edit ~/.claude/book-tools/.env with Z-Library email and password",
+                "hint": zlib_hint,
             },
             "annas_api_key": {
                 "status": "configured" if annas_key else "not_configured",
                 "required": False,
-                "hint": "Donate at Anna's Archive for API key, add to ~/.claude/book-tools/.env",
+                "hint": "Donate at Anna's Archive for API key, add ANNAS_SECRET_KEY to ~/.claude/book-tools/.env",
             },
         },
         "services": {
             "annas_binary": {
                 "status": "ok" if annas_binary else "missing",
-                "hint": "Run: bash scripts/setup.sh install-annas",
+                "hint": "Run: bash ${SKILL_PATH}/scripts/setup.sh install-annas (or manually download from https://github.com/iosifache/annas-mcp/releases)",
             },
         },
-        "hint": "Ready — at least one backend configured" if ready else "No backend fully configured. Set up Z-Library or Anna's Archive credentials.",
+        "hint": "Ready — at least one backend configured" if ready else "No backend fully configured. Set up Z-Library or Anna's Archive credentials in ~/.claude/book-tools/.env",
     }
     output(result)
     if not ready:
@@ -610,10 +646,7 @@ def main():
     cfg_show = cfg_sub.add_parser("show", help="Show current config")
     cfg_show.set_defaults(func=cmd_config)
 
-    cfg_set = cfg_sub.add_parser("set", help="Set config values")
-    cfg_set.add_argument("--zlib-email", help="Z-Library email")
-    cfg_set.add_argument("--zlib-password", help="Z-Library password")
-    cfg_set.add_argument("--annas-key", help="Anna's Archive API key")
+    cfg_set = cfg_sub.add_parser("set", help="Set non-sensitive config values (for credentials, edit ~/.claude/book-tools/.env)")
     cfg_set.add_argument("--annas-binary", help="Path to annas-mcp binary")
     cfg_set.add_argument("--annas-download-path", help="Anna's Archive download directory")
     cfg_set.add_argument("--annas-mirror", help="Anna's Archive mirror URL")

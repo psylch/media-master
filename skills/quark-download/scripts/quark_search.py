@@ -3,7 +3,6 @@
 
 import argparse
 import json
-import os
 import re
 import sys
 import time
@@ -302,6 +301,15 @@ def cmd_save(args):
         fail(f"Invalid pwd_id or URL: {args.pwd_id}", "invalid_id",
              hint="Provide a valid Quark share URL or pwd_id.", recoverable=False)
 
+    # Pre-check: verify Quark APP is reachable before attempting save methods
+    try:
+        http_get(f"{QUARK_APP}/desktop_info", timeout=5)
+    except Exception:
+        fail("Quark APP not running — save requires the Quark desktop APP.",
+             "app_not_running",
+             hint="Launch Quark desktop APP and log in, then run 'preflight' to verify.",
+             recoverable=False)
+
     # Method 1: desktop_share_visiting
     try:
         log("Trying desktop_share_visiting...")
@@ -370,19 +378,6 @@ def cmd_detail(args):
         fail(result["error"], code=str(result.get("code", "error")),
              hint="Failed to fetch file details for this share.")
     ok(result, hint=f"File listing for share {pwd_id}.")
-
-
-def cmd_check(args):
-    try:
-        raw = http_get(f"{QUARK_APP}/desktop_info", timeout=5)
-        resp = json.loads(raw, strict=False)
-        ok(resp, hint="Quark APP is running.")
-    except urllib.error.URLError:
-        fail("Quark APP not running (localhost:9128 refused)", "app_not_running",
-             hint="Launch Quark desktop APP first.", recoverable=False)
-    except Exception as e:
-        fail(str(e), "check_error",
-             hint="Unexpected error checking Quark APP status.")
 
 
 def cmd_preflight(args):
@@ -462,9 +457,6 @@ def main():
     p_save = sub.add_parser("save", help="Trigger Quark APP to save a share")
     p_save.add_argument("pwd_id", help="pwd_id or share URL")
 
-    # check
-    sub.add_parser("check", help="Check Quark APP status")
-
     # preflight
     sub.add_parser("preflight", help="Standardized environment readiness check")
 
@@ -483,7 +475,6 @@ def main():
         "validate": cmd_validate,
         "detail": cmd_detail,
         "save": cmd_save,
-        "check": cmd_check,
         "preflight": cmd_preflight,
         "health": cmd_health,
     }

@@ -12,17 +12,17 @@ Usage:
     # Partial setup (Last.fm only)
     python scripts/setup_config.py --lastfm-key=API_KEY
 
-    # Partial setup (Last.fm + Qobuz)
+    # Partial setup (Last.fm + Qobuz — password prompted securely)
     python scripts/setup_config.py \\
         --lastfm-key=API_KEY \\
-        --qobuz-email=EMAIL \\
-        --qobuz-password=PASSWORD
+        --qobuz-email=EMAIL
 
 Creates/updates .env file with API credentials.
 Services not specified will remain unconfigured (or keep existing values).
 """
 
 import argparse
+import getpass
 import sys
 import os
 from pathlib import Path
@@ -61,11 +61,10 @@ Examples:
   # Last.fm only (free, no OAuth needed)
   python scripts/setup_config.py --lastfm-key=abc123
 
-  # Last.fm + Qobuz (discovery + downloads)
+  # Last.fm + Qobuz (discovery + downloads, password prompted securely)
   python scripts/setup_config.py \\
       --lastfm-key=abc123 \\
-      --qobuz-email=user@example.com \\
-      --qobuz-password=mypassword
+      --qobuz-email=user@example.com
 
   # Full setup (all services)
   python scripts/setup_config.py \\
@@ -88,7 +87,6 @@ Where to get credentials:
     parser.add_argument("--lastfm-key", help="Last.fm API Key")
 
     parser.add_argument("--qobuz-email", help="Qobuz account email")
-    parser.add_argument("--qobuz-password", help="Qobuz account password")
     parser.add_argument("--qobuz-quality", default="27",
                         help="Qobuz quality: 5=MP3, 6=FLAC 16bit, 7=24bit, 27=Hi-Res (default: 27)")
     parser.add_argument("--qobuz-path", default="~/Music/Qobuz",
@@ -104,7 +102,18 @@ Where to get credentials:
     # Check if at least one service is being configured
     has_spotify = args.spotify_id and args.spotify_secret
     has_lastfm = args.lastfm_key is not None
-    has_qobuz = args.qobuz_email and args.qobuz_password
+    # If Qobuz email provided, prompt for password securely (not via CLI arg)
+    qobuz_password = None
+    if args.qobuz_email:
+        if sys.stdin.isatty():
+            qobuz_password = getpass.getpass("Qobuz password: ")
+        else:
+            qobuz_password = sys.stdin.readline().strip()
+        if not qobuz_password:
+            print("Error: Qobuz password is required when --qobuz-email is specified.")
+            print("Alternatively, edit the .env file directly to set QOBUZ_PASSWORD.")
+            sys.exit(1)
+    has_qobuz = args.qobuz_email and qobuz_password
 
     if not (has_spotify or has_lastfm or has_qobuz):
         print("Error: At least one service must be configured.")
@@ -112,7 +121,7 @@ Where to get credentials:
         print("Examples:")
         print("  --lastfm-key=KEY                    (Last.fm only)")
         print("  --spotify-id=ID --spotify-secret=SECRET  (Spotify)")
-        print("  --qobuz-email=EMAIL --qobuz-password=PASS  (Qobuz)")
+        print("  --qobuz-email=EMAIL                        (Qobuz, password prompted)")
         sys.exit(1)
 
     # Load existing values to preserve them
@@ -149,7 +158,7 @@ Where to get credentials:
     lines.append("# === Qobuz ===")
     if has_qobuz:
         lines.append(f"QOBUZ_EMAIL={args.qobuz_email}")
-        lines.append(f"QOBUZ_PASSWORD={args.qobuz_password}")
+        lines.append(f"QOBUZ_PASSWORD={qobuz_password}")
         lines.append(f"QOBUZ_QUALITY={args.qobuz_quality}")
         lines.append(f"QOBUZ_DOWNLOAD_PATH={args.qobuz_path}")
     elif existing.get("QOBUZ_EMAIL"):
@@ -161,11 +170,11 @@ Where to get credentials:
         lines.append("# Not configured")
     lines.append("")
 
-    # TIDAL (always write defaults, actual auth is via tidal-dl)
+    # TIDAL (always write defaults, actual auth is via tiddl)
     lines.append("# === TIDAL ===")
     lines.append(f"TIDAL_QUALITY={args.tidal_quality}")
     lines.append(f"TIDAL_DOWNLOAD_PATH={args.tidal_path}")
-    lines.append("# Note: TIDAL requires separate OAuth via 'tidal-dl' command")
+    lines.append("# Note: TIDAL requires separate OAuth via 'tiddl auth login' command")
 
     env_content = "\n".join(lines) + "\n"
 
@@ -205,7 +214,7 @@ Where to get credentials:
     else:
         print("  [-] Qobuz: Not configured")
 
-    print("  [-] TIDAL: Requires separate OAuth (run 'tidal-dl')")
+    print("  [-] TIDAL: Requires separate OAuth (run 'tiddl auth login')")
 
     print()
     if has_spotify:

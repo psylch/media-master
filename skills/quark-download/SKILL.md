@@ -12,22 +12,29 @@ Automate the full workflow: search resources → validate links → save to Quar
 
 All operations use the CLI script at `${SKILL_PATH}/scripts/quark_search.py`. It outputs JSON to stdout (`{"status": "ok", "results": {...}, "hint": "..."}`) and errors to stderr (`{"error": "code", "message": "...", "hint": "...", "recoverable": true/false}`). Exit codes: 0 = success, 1 = recoverable error, 2 = fatal error.
 
-## Preflight
+## Preflight (MUST run first)
 
-Before any operation, verify the environment:
+**Before any business command** (search, validate, save, etc.), run preflight:
 
 ```bash
 python3 ${SKILL_PATH}/scripts/quark_search.py preflight
 ```
 
-**Response:** Standardized JSON with `ready: true/false`, `dependencies`, and `services` status. If `ready: true`, proceed. If `ready: false`, follow the hints.
+**Response:** Standardized JSON with `ready: true/false`, `dependencies`, and `services` status.
+
+- If `ready: true` → proceed to workflow.
+- If `ready: false` → follow the Check/Fix table below, then re-run preflight until it passes. **Do NOT proceed to search or save until preflight passes.**
 
 | Check | Fix |
 |-------|-----|
-| Quark APP not running | Launch Quark desktop APP |
-| Quark APP not logged in | Log in with membership account |
+| Quark APP not running | Launch Quark desktop APP and wait a few seconds for it to start |
+| Quark APP not logged in | Log in with membership account in the Quark APP |
+
+> **Why gate on preflight?** Search itself works without Quark APP (it calls the PanSou web API), but `save` requires a running, logged-in Quark APP. Running preflight first prevents the frustrating experience of finding resources and then discovering you can't save them.
 
 ## Workflow — Quick Search (recommended)
+
+**Prerequisite:** Preflight must have returned `ready: true`.
 
 A single command searches PanSou, validates all links in parallel, and fetches file details for the top results:
 
@@ -91,6 +98,8 @@ python3 ${SKILL_PATH}/scripts/quark_search.py search "KEYWORD" --top 5
 
 ## Workflow — Step-by-step
 
+**Prerequisite:** Preflight must have returned `ready: true`.
+
 For granular control, use individual subcommands:
 
 ### Validate Links
@@ -142,6 +151,8 @@ Ask the user which one to save.
 
 ## Save
 
+**Requires Quark APP running and logged in.** Before attempting save, verify preflight has passed in this session. If unsure, re-run preflight.
+
 When the user selects a resource, trigger the Quark APP to open the share link:
 
 ```bash
@@ -178,6 +189,7 @@ Method: [save method used]
 |-------|-----------|------------|
 | Quark APP not running | `preflight` returns `ready: false`, service `not_running` | Tell user to launch Quark APP |
 | Not logged in | `preflight` returns `ready: false`, hint mentions login | Tell user to log in |
+| APP disconnected mid-session | `save` returns `app_not_running` error after preflight passed earlier | Re-run preflight; if it fails, tell user to restart Quark APP and log in again |
 | No search results | `search` returns `total: 0` | Suggest different keywords |
 | All links invalid | `search` returns `valid_count: 0` | Try alternative keywords or drive types |
 | Share has password | `validate` returns password required error | Ask user for the extraction code (提取码) |

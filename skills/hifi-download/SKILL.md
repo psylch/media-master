@@ -35,19 +35,13 @@ Creates `.venv`, installs core dependencies (`spotipy`, `pylast`, `requests`, `p
 **IMPORTANT**: Do NOT ask the user for credentials in chat. Instead:
 1. Create `.env` from template if not exists: `cp ${SKILL_PATH}/.env.example ${SKILL_PATH}/.env`
 2. Tell user to edit `${SKILL_PATH}/.env` with their credentials
-3. Wait for confirmation, then verify
-
-Alternatively, use the config script:
-
-```bash
-bash ${SKILL_PATH}/run.sh setup_config --lastfm-key=KEY [--spotify-id=ID --spotify-secret=SECRET] [--qobuz-email=EMAIL --qobuz-password=PASS]
-```
+3. Wait for confirmation, then verify with Step 4
 
 **Where to get credentials:**
 - Spotify: https://developer.spotify.com/dashboard (free)
 - Last.fm: https://www.last.fm/api/account/create (free)
 - Qobuz: Requires Studio/Sublime subscription
-- TIDAL: Run `tiddl auth login` in venv for OAuth
+- TIDAL: Run `tiddl auth login` in venv for OAuth (no `.env` entry needed)
 
 ### Step 4: Verify
 
@@ -56,6 +50,21 @@ bash ${SKILL_PATH}/run.sh status
 ```
 
 Shows which services are **READY**, **DISABLED**, or **need setup**. **Only use services marked READY.**
+
+### Preflight Check → Fix Table
+
+| Check | Fix (macOS) | Fix (Linux) |
+|-------|-------------|-------------|
+| `PYTHON=missing` | `brew install python3` | `sudo apt install python3` |
+| `VENV=missing` | `bash ${SKILL_PATH}/scripts/setup.sh install` | Same |
+| Core deps missing (SPOTIPY, PYLAST, etc.) | `bash ${SKILL_PATH}/scripts/setup.sh install --force` | Same |
+| `ENV_FILE=missing` | `cp ${SKILL_PATH}/.env.example ${SKILL_PATH}/.env` then edit | Same |
+| Spotify: NOT CONFIGURED | Edit `.env`: set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` | Same |
+| Last.fm: NOT CONFIGURED | Edit `.env`: set `LASTFM_API_KEY` | Same |
+| Qobuz: NOT CONFIGURED | Edit `.env`: set `QOBUZ_EMAIL` and `QOBUZ_PASSWORD` | Same |
+| TIDAL: NOT CONFIGURED | Run `tiddl auth login` inside the venv | Same |
+| Spotify/Last.fm/Qobuz: ERROR (validation failed) | Check credentials in `.env` are correct, re-obtain from dashboard if needed | Same |
+| TIDAL: ERROR (token expired) | Run `tiddl auth refresh` or `tiddl auth login` inside the venv | Same |
 
 ## Service Types
 
@@ -248,7 +257,7 @@ Gather file paths and sizes from the `download_status` output and by listing the
 | Error | Detection | Resolution |
 |-------|-----------|------------|
 | Venv missing | `run.sh` exits with `venv_missing` | Run `bash ${SKILL_PATH}/scripts/setup.sh install` |
-| Service not configured | `status` shows `NOT CONFIGURED` | Guide user to edit `.env` or run `setup_config` |
+| Service not configured | `status` shows `NOT CONFIGURED` | Guide user to edit `${SKILL_PATH}/.env` (see Preflight Check -> Fix Table) |
 | Spotify OAuth expired | Spotify commands fail with auth error | Run `bash ${SKILL_PATH}/run.sh spotify_auth` to re-authorize |
 | TIDAL token expired | `status` shows `ERROR` for TIDAL | Run `tiddl auth refresh` or `tiddl auth login` in venv |
 | Service disabled by user | `status` shows `DISABLED` | Run `enable_service` if user wants to re-enable |

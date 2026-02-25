@@ -32,7 +32,7 @@ def validate_config(platform: str, config: Config):
     if platform == "qobuz" and not config.qobuz.is_configured():
         error_exit(
             "qobuz_not_configured",
-            "Set QOBUZ_EMAIL and QOBUZ_PASSWORD in .env, or run setup_config with --qobuz-email and --qobuz-password.",
+            "Edit .env: set QOBUZ_EMAIL and QOBUZ_PASSWORD (requires Qobuz Studio/Sublime subscription).",
             recoverable=True,
         )
 

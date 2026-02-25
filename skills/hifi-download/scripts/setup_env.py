@@ -92,7 +92,7 @@ python "scripts\\%1.py" %*
     print(f"  Virtual environment: {venv_dir}")
     print(f"  Run helper: {run_sh}")
     print()
-    print("Next step: Configure credentials with setup_config.py")
+    print("Next step: Edit .env to configure credentials (copy from .env.example)")
 
 
 if __name__ == "__main__":
